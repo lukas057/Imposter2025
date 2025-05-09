@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Imposter Spiel</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: #111;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+
+    #startMenu, #gameScreen {
+      width: 100%;
+      max-width: 500px;
+      padding: 20px;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #startMenu {
+      display: flex;
+    }
+
+    h2 {
+      margin-top: 0;
+    }
+
+    select, input, button {
+      font-size: 18px;
+      padding: 10px;
+      margin: 5px;
+      border: none;
+      border-radius: 10px;
+    }
+
+    button {
+      background-color: #c62828;
+      color: white;
+    }
+
+    #cardArea {
+      position: relative;
+      width: 100%;
+      max-width: 300px;
+      height: 250px;
+      margin: 20px 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .card {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      text-align: center;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      user-select: none;
+    }
+
+    .cardBase {
+      background: #222;
+      flex-direction: column;
+    }
+
+    .cardCover {
+      background: red;
+      z-index: 2;
+      transition: top 0.3s;
+      touch-action: none;
+    }
+
+    #clock {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 16px;
+    }
+
+    #pauseMessage {
+      display: none;
+      font-size: 18px;
+      margin: 15px 0;
+      text-align: center;
+    }
+
+    #nextBtn {
+      margin-top: 80px;
+      display: none;
+    }
+
+    #startBtn {
+      display: none;
+    }
+
+    #timer {
+      font-size: 26px;
+      margin: 10px;
+      display: none;
+    }
+
+    #stopBtn {
+      display: none;
+    }
+
+    #spielerListe input {
+      width: 140px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="clock"></div>
+
+<div id="startMenu">
+  <h2>Wähle ein Thema:</h2>
+  <select id="themaSelect">
+    <option value="tiere">Tiere</option>
+    <option value="essen">Essen</option>
+    <option value="berufe">Berufe</option>
+  </select>
+
+  <h3>Spieler:</h3>
+  <div id="spielerListe"></div>
+  <button onclick="addSpieler()">+ Spieler</button>
+
+  <button onclick="startSpiel()">Los geht's</button>
+</div>
+
+<div id="gameScreen">
+  <div id="pauseMessage">Timer gestoppt – wählt jetzt den Imposter oder tippt Weiter.</div>
+  <div id="cardName" style="font-size: 22px; margin-bottom: 10px;"></div>
+  <div id="cardArea">
+    <div class="card cardBase" id="cardBase">
+      <div id="cardText">Wort</div>
+    </div>
+    <div class="card cardCover" id="cardCover">Ziehen</div>
+  </div>
+  <button id="nextBtn" onclick="nextCard()">Weiter</button>
+  <button id="startBtn" onclick="startTimer()">Start</button>
+  <div id="timer">05:00</div>
+  <button id="stopBtn" onclick="stopTimer()">Stopp</button>
+</div>
+
+<script>
+  const themen = {
+    tiere: ["Hund", "Katze", "Tiger", "Elefant", "Löwe"],
+    essen: ["Pizza", "Burger", "Pasta", "Suppe", "Salat"],
+    berufe: ["Arzt", "Lehrer", "Bäcker", "Pilot", "Polizist"]
+  };
+
+  let spieler = ["Spieler 1", "Spieler 2", "Spieler 3", "Spieler 4"];
+  let rollen = [], nameZufall = [], currentIndex = 0;
+  let timerInterval, timeLeft = 300, gameStarted = false, stopAvailableTime = 30;
+
+  const cardBase = document.getElementById('cardBase');
+  const cardCover = document.getElementById('cardCover');
+  const cardText = document.getElementById('cardText');
+  const cardName = document.getElementById('cardName');
+  const nextBtn = document.getElementById('nextBtn');
+  const startBtn = document.getElementById('startBtn');
+  const timerDisplay = document.getElementById('timer');
+  const stopBtn = document.getElementById('stopBtn');
+  const pauseMessage = document.getElementById('pauseMessage');
+  const spielerListeDiv = document.getElementById('spielerListe');
+
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('clock').textContent = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  function updateSpielerListe() {
+    spielerListeDiv.innerHTML = "";
+    spieler.forEach((name, i) => {
+      const input = document.createElement("input");
+      input.value = name;
+      input.oninput = () => spieler[i] = input.value;
+      const btn = document.createElement("button");
+      btn.textContent = "-";
+      btn.onclick = () => {
+        spieler.splice(i, 1);
+        updateSpielerListe();
+      };
+      const div = document.createElement("div");
+      div.appendChild(input);
+      div.appendChild(btn);
+      spielerListeDiv.appendChild(div);
+    });
+  }
+
+  function addSpieler() {
+    spieler.push("Spieler " + (spieler.length + 1));
+    updateSpielerListe();
+  }
+
+  function startSpiel() {
+    const selected = document.getElementById("themaSelect").value;
+    const wörter = themen[selected];
+    const geheim = wörter[Math.floor(Math.random() * wörter.length)];
+    const imposter = Math.floor(Math.random() * spieler.length);
+    rollen = spieler.map((_, i) => i === imposter ? "???" : geheim);
+    nameZufall = [...spieler].sort(() => Math.random() - 0.5);
+    currentIndex = 0;
+    document.getElementById("startMenu").style.display = "none";
+    document.getElementById("gameScreen").style.display = "flex";
+    showCard();
+  }
+
+  function showCard() {
+    if (currentIndex >= spieler.length) {
+      document.getElementById('cardArea').style.display = "none";
+      cardName.textContent = "";
+      startBtn.style.display = "block";
+      return;
+    }
+    cardText.textContent = rollen[currentIndex];
+    cardCover.style.top = "0px";
+    nextBtn.style.display = "none";
+    cardName.textContent = nameZufall[currentIndex];
+  }
+
+  function startTimer() {
+    startBtn.style.display = "none";
+    timerDisplay.style.display = "block";
+    stopBtn.style.display = "block";
+    pauseMessage.style.display = "none";
+    gameStarted = true;
+    stopAvailableTime = 30;
+    timeLeft = 300;  // Set timer to 5 minutes (300 seconds)
+    timerDisplay.textContent = formatTime(timeLeft);  // Display initial time
+
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      timeLeft--;  // Decrease time by 1 second
+      timerDisplay.textContent = formatTime(timeLeft);  // Update timer display
+
+      if (timeLeft <= 0) {
+        clearInterval(timerInterval);  // Stop the timer when it reaches 0
+        timerDisplay.textContent = "Zeit vorbei!";  // Show "Time's up!" message
+      }
+    }, 1000);  // Update every second
+  }
+
+  function stopTimer() {
+    if (stopAvailableTime <= 0) {
+      clearInterval(timerInterval);
+      pauseMessage.style.display = "block";
+      nextBtn.style.display = "block";
+      stopBtn.style.display = "none";
+    }
+  }
+
+  function nextCard() {
+    if (pauseMessage.style.display === "block") {
+      pauseMessage.style.display = "none";
+      nextBtn.style.display = "none";
+      startTimer();
+    } else {
+      currentIndex++;
+      showCard();
+    }
+  }
+
+  setInterval(() => {
+    if (stopAvailableTime > 0) {
+      stopAvailableTime--;
+    }
+  }, 1000);
+
+  let startY = 0;
+  cardCover.addEventListener("touchstart", e => {
+    startY = e.touches[0].clientY;
+  });
+  cardCover.addEventListener("touchmove", e => {
+    const delta = e.touches[0].clientY - startY;
+    if (delta < -10 && delta > -180) {
+      cardCover.style.top = `${delta}px`;
+    }
+  });
+  cardCover.addEventListener("touchend", () => {
+    cardCover.style.top = "0px";
+    setTimeout(() => {
+      nextBtn.style.display = "block";
+    }, 300);
+  });
+
+  updateSpielerListe();
+
+  // Timer Formatting (mm:ss)
+  function formatTime(seconds) {
+    const minutes = Math.floor(seconds / 60);  // Calculate minutes
+    const remainingSeconds = seconds % 60;  // Calculate remaining seconds
+    return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+  }
+</script>
+
+</body>
+</html>
